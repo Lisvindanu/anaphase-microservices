@@ -9,19 +9,21 @@ import io.swagger.v3.oas.annotations.info.*
 
 @OpenAPIDefinition(
     info = Info(
-            title = "gateway",
-            version = "0.0"
+        title = "Anaphase Gateway",
+        version = "0.1",
+        description = "API Gateway with Request Routing & Load Balancing"
     )
 )
 object Api {
 }
+
 @ContextConfigurer
 class Configurer: ApplicationContextConfigurer {
     override fun configure(builder: ApplicationContextBuilder) {
-        builder.defaultEnvironments("dev");
-	}
-}
-fun main(args: Array<String>) {
-	run(*args)
+        builder.defaultEnvironments("dev")
+    }
 }
 
+fun main(args: Array<String>) {
+    run(*args)
+}

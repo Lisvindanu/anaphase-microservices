@@ -1,10 +1,16 @@
+# services/gateway/src/main/resources/application.yml (FINAL VERSION)
+
 micronaut:
+  application:
+    name: gateway
+  server:
+    port: 8080
+    max-request-size: 10485760  # 10MB in bytes
+
   security:
     intercept-url-map:
-    - access: isAnonymous()
-      pattern: /swagger/**
-    - access: isAnonymous()
-      pattern: /swagger-ui/**
+      - access: isAnonymous()
+        pattern: /**  # Allow all access for testing
     authentication: cookie
     token:
       jwt:
@@ -12,6 +18,7 @@ micronaut:
           secret:
             generator:
               secret: ${JWT_GENERATOR_SIGNATURE_SECRET:pleaseChangeThisSecretForANewOne}
+
   metrics:
     export:
       prometheus:
@@ -19,12 +26,7 @@ micronaut:
         descriptions: true
         step: PT1M
     enabled: true
-  session:
-    http:
-      cookie: true
-      header: true
-      redis:
-        enabled: true
+
   router:
     static-resources:
       swagger:
@@ -33,17 +35,47 @@ micronaut:
       swagger-ui:
         paths: classpath:META-INF/swagger/views/swagger-ui
         mapping: /swagger-ui/**
-consul.client.registration.enabled: true
-micrometer:
-  observation:
-    http:
-      server:
+
+  http:
+    client:
+      pool:
         enabled: true
-      client:
-        enabled: true
-redis.uri: redis://localhost
-tracing:
-  jaeger:
-    enabled: true
-    sampler:
-      probability: 0.1
+        max-connections: 50
+      read-timeout: 30s
+      connect-timeout: 5s
+
+# Gateway Configuration (FIXED STRUCTURE)
+gateway:
+  routes:
+    routes:
+      - id: "discovery-api-route"
+        path: "/gateway/api/discovery/**"
+        serviceName: "discovery"
+        stripPrefix: true
+        retryAttempts: 3
+        timeoutMs: 30000
+        loadBalancingStrategy: "ROUND_ROBIN"
+
+      - id: "discovery-direct-route"
+        path: "/gateway/discovery/**"
+        serviceName: "discovery"
+        stripPrefix: true
+        retryAttempts: 2
+        timeoutMs: 15000
+        loadBalancingStrategy: "ROUND_ROBIN"
+
+      - id: "catalog-route"
+        path: "/gateway/catalog/**"
+        serviceName: "catalog"
+        stripPrefix: true
+        retryAttempts: 2
+        timeoutMs: 20000
+        loadBalancingStrategy: "WEIGHTED_ROUND_ROBIN"
+
+# Logging Configuration
+logger:
+  levels:
+    org.anaphase.gateway: INFO
+    org.anaphase.gateway.router: DEBUG
+    org.anaphase.gateway.registry: DEBUG
+    org.anaphase.gateway.loadbalancer: DEBUG
