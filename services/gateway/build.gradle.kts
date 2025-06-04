@@ -69,10 +69,11 @@ dependencies {
     implementation("jakarta.validation:jakarta.validation-api")
 
     // ===================================================================
-    // Kotlin Support
+    // Kotlin Support - FIXED
     // ===================================================================
     implementation("org.jetbrains.kotlin:kotlin-reflect:${kotlinVersion}")
-    implementation("org.jetbrains.kotlin.kotlin-stdlib-jdk8:${kotlinVersion}")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:${kotlinVersion}")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlinVersion}")
 
     // ===================================================================
     // OpenAPI Documentation
