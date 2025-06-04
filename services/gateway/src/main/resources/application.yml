@@ -1,4 +1,7 @@
-# services/gateway/src/main/resources/application.yml (FINAL VERSION)
+# ===============================================================================
+# services/gateway/src/main/resources/application.yml
+# Anaphase Gateway - Complete Configuration for Phase 2 (Rate Limiting)
+# ===============================================================================
 
 micronaut:
   application:
@@ -7,10 +10,13 @@ micronaut:
     port: 8080
     max-request-size: 10485760  # 10MB in bytes
 
+  # ===================================================================
+  # Security Configuration (Basic setup, will expand in Phase 2.2)
+  # ===================================================================
   security:
     intercept-url-map:
       - access: isAnonymous()
-        pattern: /**  # Allow all access for testing
+        pattern: /**  # Allow all access for now (Phase 2.1)
     authentication: cookie
     token:
       jwt:
@@ -19,6 +25,9 @@ micronaut:
             generator:
               secret: ${JWT_GENERATOR_SIGNATURE_SECRET:pleaseChangeThisSecretForANewOne}
 
+  # ===================================================================
+  # Metrics & Monitoring
+  # ===================================================================
   metrics:
     export:
       prometheus:
@@ -27,6 +36,9 @@ micronaut:
         step: PT1M
     enabled: true
 
+  # ===================================================================
+  # Static Resources (Swagger UI)
+  # ===================================================================
   router:
     static-resources:
       swagger:
@@ -36,6 +48,9 @@ micronaut:
         paths: classpath:META-INF/swagger/views/swagger-ui
         mapping: /swagger-ui/**
 
+  # ===================================================================
+  # HTTP Client Configuration
+  # ===================================================================
   http:
     client:
       pool:
@@ -44,8 +59,14 @@ micronaut:
       read-timeout: 30s
       connect-timeout: 5s
 
-# Gateway Configuration (FIXED STRUCTURE)
+# ===============================================================================
+# Gateway Configuration - Phase 2
+# ===============================================================================
 gateway:
+
+  # ===================================================================
+  # Phase 1: Routing Configuration (Existing)
+  # ===================================================================
   routes:
     routes:
       - id: "discovery-api-route"
@@ -72,10 +93,217 @@ gateway:
         timeoutMs: 20000
         loadBalancingStrategy: "WEIGHTED_ROUND_ROBIN"
 
+      - id: "orders-route"
+        path: "/gateway/orders/**"
+        serviceName: "orders"
+        stripPrefix: true
+        retryAttempts: 3
+        timeoutMs: 25000
+        loadBalancingStrategy: "ROUND_ROBIN"
+
+  # ===================================================================
+  # Phase 2.1: Rate Limiting Configuration (NEW)
+  # ===================================================================
+  rate-limiting:
+    enabled: true
+    skip-debug-endpoints: true
+    default-strategy: TOKEN_BUCKET
+
+    # Default rate limit for unidentified clients
+    default-limit:
+      requests-per-minute: 60
+      burst-size: 10
+      strategy: TOKEN_BUCKET
+
+    # Global system-wide rate limit
+    global-limit:
+      requests-per-minute: 10000
+      burst-size: 1000
+      strategy: TOKEN_BUCKET
+
+    # User-specific rate limits (user-id -> config)
+    user-limits:
+      "admin":
+        requests-per-minute: 1000
+        burst-size: 100
+        strategy: TOKEN_BUCKET
+      "premium-user":
+        requests-per-minute: 300
+        burst-size: 50
+        strategy: TOKEN_BUCKET
+      "developer":
+        requests-per-minute: 500
+        burst-size: 75
+        strategy: TOKEN_BUCKET
+      "basic-user":
+        requests-per-minute: 60
+        burst-size: 10
+        strategy: TOKEN_BUCKET
+
+    # Path-specific rate limits (regex pattern -> config)
+    path-limits:
+      "/gateway/discovery/.*":
+        requests-per-minute: 30
+        burst-size: 5
+        strategy: TOKEN_BUCKET
+      "/gateway/catalog/search.*":
+        requests-per-minute: 100
+        burst-size: 20
+        strategy: TOKEN_BUCKET
+      "/gateway/orders/.*":
+        requests-per-minute: 120
+        burst-size: 25
+        strategy: TOKEN_BUCKET
+      "/gateway/api/.*":
+        requests-per-minute: 200
+        burst-size: 40
+        strategy: TOKEN_BUCKET
+
+    # Storage configuration for rate limiting
+    storage:
+      type: MEMORY  # Options: MEMORY, REDIS, HYBRID
+      redis-key-prefix: "anaphase:gateway:ratelimit:"
+      fallback-to-memory: true
+
+  # ===================================================================
+  # Phase 2.2: Security Configuration (Planned for next iteration)
+  # ===================================================================
+  security:
+    jwt:
+      enabled: false  # Will enable in Phase 2.2
+      secret-key: ${JWT_SECRET:your-secret-key-here}
+      issuer: ${JWT_ISSUER:anaphase-identity}
+      audience: ${JWT_AUDIENCE:anaphase-services}
+      expiry-tolerance-seconds: 30
+    rbac:
+      enabled: false  # Will enable in Phase 2.2
+      default-role: USER
+      admin-paths:
+        - "/gateway/admin/**"
+        - "/debug/**"
+
+  # ===================================================================
+  # Phase 2.3: Request Transformation (Planned)
+  # ===================================================================
+  transformation:
+    cors:
+      enabled: true
+      allowed-origins: ["*"]
+      allowed-methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+      allowed-headers: ["*"]
+      max-age: 3600
+    headers:
+      add:
+        - name: "X-Gateway-Version"
+          value: "0.2"
+        - name: "X-Processed-By"
+          value: "anaphase-gateway"
+        - name: "X-Request-ID"
+          value: "${uuid}"  # Will generate UUID per request
+      remove:
+        - "X-Internal-Token"
+        - "X-Debug-Info"
+        - "Server"
+
+# ===============================================================================
+# Redis Configuration (for future distributed rate limiting)
+# ===============================================================================
+redis:
+  uri: ${REDIS_URI:redis://localhost:6379}
+  timeout: 2s
+
+# ===============================================================================
+# Consul Configuration (for service discovery)
+# ===============================================================================
+consul:
+  client:
+    registration:
+      enabled: true
+    defaultZone: ${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}
+
+# ===============================================================================
 # Logging Configuration
+# ===============================================================================
 logger:
   levels:
+    # Core gateway logging
     org.anaphase.gateway: INFO
     org.anaphase.gateway.router: DEBUG
     org.anaphase.gateway.registry: DEBUG
     org.anaphase.gateway.loadbalancer: DEBUG
+
+    # Phase 2: Rate limiting logging
+    org.anaphase.gateway.ratelimit: INFO
+    org.anaphase.gateway.debug: DEBUG
+
+    # Phase 2.2: Security logging (for future)
+    org.anaphase.gateway.security: INFO
+
+    # Micronaut framework logging
+    io.micronaut.http.server: INFO
+    io.micronaut.security: INFO
+
+    # Reduce noise from unnecessary logs
+    io.netty: WARN
+    io.micronaut.context: WARN
+
+# ===============================================================================
+# Management & Health Check Configuration
+# ===============================================================================
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+  info:
+    enabled: true
+    sensitive: false
+  prometheus:
+    enabled: true
+    sensitive: false
+  beans:
+    enabled: true
+    sensitive: true
+
+# ===============================================================================
+# Environment-specific Configuration
+# ===============================================================================
+---
+# Development Environment
+micronaut:
+  environments: dev
+
+gateway:
+  rate-limiting:
+    enabled: true
+    # Lower limits for development testing
+    default-limit:
+      requests-per-minute: 30
+      burst-size: 5
+
+logger:
+  levels:
+    org.anaphase.gateway: DEBUG
+    org.anaphase.gateway.ratelimit: DEBUG
+
+---
+# Production Environment
+micronaut:
+  environments: prod
+
+gateway:
+  rate-limiting:
+    enabled: true
+    # Higher limits for production
+    default-limit:
+      requests-per-minute: 100
+      burst-size: 20
+    global-limit:
+      requests-per-minute: 50000
+      burst-size: 5000
+    storage:
+      type: REDIS  # Use Redis in production
+
+logger:
+  levels:
+    org.anaphase.gateway: INFO
+    org.anaphase.gateway.ratelimit: WARN
